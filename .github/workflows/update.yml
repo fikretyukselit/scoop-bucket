@@ -1,0 +1,40 @@
+# Keeps bucket/frc-mcp.json on the latest frc-mcp release. It writes only to
+# this repository (GITHUB_TOKEN), and only after the release's checksums
+# verify against the frc-mcp release workflow's keyless signature.
+name: update
+on:
+  schedule:
+    - cron: "23 * * * *" # hourly
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: update
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Latest release, verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release view -R fikretyukselit/frc-mcp --json tagName -q .tagName)
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "unexpected tag $tag"; exit 1; }
+          mkdir -p /tmp/rel
+          gh release download "$tag" -R fikretyukselit/frc-mcp -p checksums.txt -p checksums.txt.sigstore.json -D /tmp/rel --clobber
+          cosign verify-blob --bundle /tmp/rel/checksums.txt.sigstore.json \
+            --certificate-identity "https://github.com/fikretyukselit/frc-mcp/.github/workflows/release.yml@refs/tags/$tag" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com /tmp/rel/checksums.txt
+          python3 scripts/manifest.py "${tag#v}" /tmp/rel/checksums.txt > bucket/frc-mcp.json
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+      - name: Commit if changed
+        run: |
+          set -euo pipefail
+          git add bucket/frc-mcp.json
+          if git diff --cached --quiet; then echo "up to date ($TAG)"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "frc-mcp ${TAG#v}"
+          git push
