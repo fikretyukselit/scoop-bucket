@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  actions: write # start test.yml: pushes made with GITHUB_TOKEN trigger no workflows
 concurrency:
   group: update
 jobs:
@@ -38,3 +39,6 @@ jobs:
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -m "frc-mcp ${TAG#v}"
           git push
+          gh workflow run test.yml --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}
