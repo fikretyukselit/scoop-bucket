@@ -1,0 +1,23 @@
+# Installs frc-mcp from this bucket on a clean Windows runner whenever the
+# manifest changes.
+name: test
+on:
+  push:
+    paths: [bucket/**, .github/workflows/test.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: windows-latest
+    steps:
+      - name: Install Scoop, the bucket and frc-mcp
+        shell: pwsh
+        run: |
+          Invoke-RestMethod -Uri https://get.scoop.sh -OutFile install.ps1
+          .\install.ps1 -RunAsAdmin
+          $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
+          scoop bucket add fikretyukselit https://github.com/fikretyukselit/scoop-bucket
+          scoop install frc-mcp
+          frc-mcp version
+          if ($LASTEXITCODE -ne 0) { exit 1 }
